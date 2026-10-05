@@ -12,7 +12,9 @@ const Breadcrumb = () => {
 
   return (
     <nav className="breadcrumb" aria-label="Breadcrumb">
-      {page ? <><Link to="/">Dashboard</Link><span aria-hidden="true">/</span><span aria-current="page">{page}</span></> : <span aria-current="page">Dashboard</span>}
+      {page ? <><Link to="/">Dashboard</Link>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page">{page}</span></> : <span aria-current="page">Dashboard</span>}
     </nav>
   );
 };

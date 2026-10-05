@@ -1,48 +1,19 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
+import Modal from '../components/Modal';
 
-const availableStudents = ['John Doe', 'Jane Smith', 'Michael Johnson', 'Emily Davis'];
-const availableCourses = ['CSC 101', 'MTH 102', 'PHY 104'];
-const initialEnrolments = [
-  { id: 1, student: 'John Doe', course: 'CSC 101', session: '2026/2027', status: 'Enrolled' },
-  { id: 2, student: 'Jane Smith', course: 'MTH 102', session: '2026/2027', status: 'Enrolled' },
-  { id: 3, student: 'Emily Davis', course: 'PHY 104', session: '2025/2026', status: 'Completed' },
-];
-
-const EnrolmentsPage = () => {
-  const [enrolments, setEnrolments] = useState(initialEnrolments);
-  const [search, setSearch] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ student: availableStudents[0], course: availableCourses[0], session: '2026/2027', status: 'Enrolled' });
-
-  const filteredEnrolments = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return enrolments.filter((item) => `${item.student} ${item.course}`.toLowerCase().includes(query));
-  }, [enrolments, search]);
-
-  const submit = (event) => {
-    event.preventDefault();
-    const exists = enrolments.some((item) => item.student === form.student && item.course === form.course && item.session === form.session);
-    if (exists) return window.alert('This student is already enrolled in that course for the selected session.');
-    setEnrolments((current) => [{ ...form, id: crypto.randomUUID() }, ...current]);
-    setShowForm(false);
-  };
-
-  return (
-    <section className="panel">
-      <div className="page-heading"><div><h1>Enrolments</h1><p>Assign students to courses</p></div><button type="button" onClick={() => setShowForm((value) => !value)}>{showForm ? 'Close form' : 'New enrolment'}</button></div>
-      {showForm && <form className="form-card" onSubmit={submit}>
-        <label>Student<select value={form.student} onChange={(e) => setForm({...form, student:e.target.value})}>{availableStudents.map((student) => <option key={student}>{student}</option>)}</select></label>
-        <label>Course<select value={form.course} onChange={(e) => setForm({...form, course:e.target.value})}>{availableCourses.map((course) => <option key={course}>{course}</option>)}</select></label>
-        <label>Academic session<input required value={form.session} onChange={(e) => setForm({...form, session:e.target.value})} /></label>
-        <label>Status<select value={form.status} onChange={(e) => setForm({...form, status:e.target.value})}><option>Enrolled</option><option>Completed</option><option>Dropped</option></select></label>
-        <div className="form-actions"><button type="submit">Save enrolment</button></div>
-      </form>}
-      <div className="toolbar single-control"><label>Search enrolments<input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by student or course..." /></label></div>
-      <div className="table-wrap"><table><thead><tr><th>Student</th><th>Course</th><th>Session</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-        {filteredEnrolments.map((item) => <tr key={item.id}><td><strong>{item.student}</strong></td><td>{item.course}</td><td>{item.session}</td><td><span className={`badge ${item.status.toLowerCase()}`}>{item.status}</span></td><td><button type="button" className="danger" onClick={() => setEnrolments((current) => current.filter((entry) => entry.id !== item.id))}>Remove</button></td></tr>)}
-      </tbody></table>{filteredEnrolments.length === 0 && <div className="empty">No matching enrolments found.</div>}</div>
-    </section>
-  )
+const empty = { student_id: '', course_id: '', session: '2026/2027', semester: 'first', status: 'enrolled' };
+export default function EnrolmentsPage() {
+  const { isAdmin } = useAuth(); const [items, setItems] = useState([]); const [students, setStudents] = useState([]); const [courses, setCourses] = useState([]); const [form, setForm] = useState(empty); const [showForm, setShowForm] = useState(false); const [error, setError] = useState('');
+  const load = useCallback(async () => { try { const config = { params: { per_page: 100 } }; const [enrolments, courseList] = await Promise.all([api('/enrolments', config), api('/courses', config)]); setItems(enrolments.data); setCourses(courseList.data); if (isAdmin) { const studentList = await api('/students', config); setStudents(studentList.data); } } catch (e) { setError(e.message); } }, [isAdmin]);
+  // Fetch the role-scoped collections whenever the signed-in role changes.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(); }, [load]);
+  const submit = async (event) => { event.preventDefault(); try { await api('/enrolments', { method: 'POST', data: { ...form, student_id: Number(form.student_id), course_id: Number(form.course_id) } }); setShowForm(false); setForm(empty); await load(); } catch (e) { setError(Object.values(e.errors ?? {}).flat()[0] ?? e.message); } };
+  const remove = async (id) => { if (!window.confirm('Remove this enrolment?')) return; try { await api(`/enrolments/${id}`, { method: 'DELETE' }); await load(); } catch (e) { setError(e.message); } };
+  return <section className="panel"><div className="page-heading"><div><h1>{isAdmin ? 'Enrolments' : 'My enrolments'}</h1><p>{isAdmin ? 'Assign students to courses' : 'Your course history'}</p></div>{isAdmin && <button onClick={() => { setForm(empty); setError(''); setShowForm(true); }}>New enrolment</button>}</div>{error && <div className="alert error-alert">{error}</div>}
+    {showForm && <Modal title="New enrolment" onClose={() => setShowForm(false)}><form className="form-card modal-form" onSubmit={submit}><label>Student<select required value={form.student_id} onChange={(e) => setForm({ ...form, student_id: e.target.value })}><option value="">Select student</option>{students.map((student) => <option key={student.id} value={student.id}>{student.name} ({student.matric_no})</option>)}</select></label><label>Course<select required value={form.course_id} onChange={(e) => setForm({ ...form, course_id: e.target.value })}><option value="">Select course</option>{courses.map((course) => <option key={course.id} value={course.id}>{course.code} — {course.title}</option>)}</select></label><label>Session<input required pattern="\d{4}/\d{4}" value={form.session} onChange={(e) => setForm({ ...form, session: e.target.value })} /></label><label>Semester<select value={form.semester} onChange={(e) => setForm({ ...form, semester: e.target.value })}><option value="first">First</option><option value="second">Second</option></select></label><label>Status<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="enrolled">Enrolled</option><option value="completed">Completed</option><option value="dropped">Dropped</option></select></label><div className="form-actions"><button type="button" className="secondary" onClick={() => setShowForm(false)}>Cancel</button><button>Save enrolment</button></div></form></Modal>}
+    <div className="table-wrap"><table><thead><tr><th>Student</th><th>Course</th><th>Session</th><th>Semester</th><th>Status</th>{isAdmin && <th>Actions</th>}</tr></thead><tbody>{items.map((item) => <tr key={item.id}><td>{item.student.name}</td><td><strong>{item.course.code}</strong> — {item.course.title}</td><td>{item.session}</td><td>{item.semester}</td><td><span className={`badge ${item.status}`}>{item.status}</span></td>{isAdmin && <td><button className="danger" onClick={() => remove(item.id)}>Remove</button></td>}</tr>)}</tbody></table>{!items.length && <div className="empty">No enrolments found.</div>}</div>
+  </section>;
 }
-
-export default EnrolmentsPage

@@ -16,7 +16,7 @@ const StudentTable = ({ students, onEdit, onRemove }) => {
         </thead>
         <tbody>
             {students.map(student => <tr key={student.id}>
-                <td>{student.name}</td>
+                <td><span className="student-name">{student.avatar_url ? <img className="student-avatar" src={student.avatar_url} alt="" /> : <span className="student-avatar avatar-fallback">{student.name.charAt(0)}</span>}{student.name}</span></td>
                 <td>{student.matricNo}</td>
                 <td>{student.department || student.course}</td>
                 <td><span className={`badge ${student.status.toLowerCase()}`}>{student.status}</span></td>
